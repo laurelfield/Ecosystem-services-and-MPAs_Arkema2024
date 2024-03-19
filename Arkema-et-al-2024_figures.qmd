@@ -1,0 +1,1697 @@
+---
+title: "OE_Figures"
+format:
+  pdf:
+    fig-pos: 'h'
+editor: visual
+---
+
+# Arkema et al. 2024 _ Advancing marine protected areas and other approaches by quantifying benefits of coastal ecosystems
+
+# Summary statistics and Figures
+
+Advancing marine protected areas and other approaches by quantifying benefits of coastal ecosystems
+
+Data was collected using GoogleSheets and is read in from there for analysis. For information on how to work with GoogleSheets in R see here: chrome-extension://efaidnbmnnnibpcajpcglclefindmkaj/https://cran.r-project.org/web/packages/googlesheets4/googlesheets4.pdf
+
+```{r setup}
+#| include: false
+#| warning: false
+
+#install packages that are needed for this code, if not already installed. 
+#necessary packages
+my_packages <- c("googlesheets4","tidyverse","ggplot2","maps","ggthemes","mapproj","stringr", "networkD3","sf","spData","tmap","webshot","dplyr") 
+not_installed <- my_packages[!(my_packages %in% installed.packages()[,"Package"])] #identifies uninstalled packages of the necessary packages
+if(length(not_installed))install.packages(not_installed) #installs missing packages
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.pos='htp',out.extra="")
+
+#packges to load for analysis
+library(googlesheets4)
+library(tidyverse)
+library(ggplot2)
+library(maps)
+library(ggthemes)
+library(mapproj)
+library(stringr)
+library(networkD3)
+library(sf)
+library(spData)
+library(tmap)
+library(webshot)
+library(dplyr)
+
+#If you need to upgrade TinyTex use the code below
+#tinytex::reinstall_tinytex(repository = "illinois")
+```
+
+```{r}
+#| include: false
+
+#read in current version of the data collection sheet from Google Drive. Call this dataframe "data".
+data <- read_sheet("link", sheet=3, col_names=TRUE)
+
+#read in the paper inventory sheet from Google Drive. This is metadata for papers included in this analysis. Call this dataframe "inventory"
+inventory <- read_sheet("link", sheet=2, col_names=TRUE)
+
+#read in google sheet that has habitat type data listed out for each paper we identified as quantifying ecosystem services (ES) for multiple habitats. Call this dataframe "multiple_habs"
+multiple_habs <- read_sheet("link", sheet=6, col_names=TRUE)
+
+#read in google sheet that has location of ES quantification listed out (country names) for each paper that quantified ES in >2 countries. Call this dataframe "multiple_countries"
+multiple_countries <- read_sheet("link", sheet=5, col_names=TRUE)
+
+#read in google sheet that has ES categories, and associated habitat types, and management categories, listed out for each paper we identified as quantifying ES for multiple habitat types. Call this dataframe "mult_habs_cats"
+mult_habs_cats <- read_sheet("link", sheet=4, col_names=TRUE)
+```
+
+```{r}
+#| include: false
+#look at data structure, content for "data" dataframe
+glimpse(data)
+```
+
+```{r}
+#| include: false
+# look at columns, content for "inventory" dataframe
+glimpse(inventory)
+```
+
+```{r}
+#| include: false
+#clean and prep "inventory" dataframe for analysis
+
+sapply(inventory, class) #check column "class" types in inventory dataframe
+#Paper_ID column must be numeric, can assign it to be such using as.numeric() function
+
+inventory_assessed <- dplyr::filter(inventory, Status %in% "Assessed") #create data frame with data for only papers that were assessed.
+
+#note, 110 different papers were assessed as part of this analysis
+```
+
+## Figure 1
+
+Figure 1 is a three paneled figure. It answers the following questions: a) where do these studies generally occur? b) Of papers that quantify services, how many times are different categories of services quantified? And how many times are different subcategories of services quantified? c) Of papers that quantify services, what proportion focus on different coastal habitats?
+
+### Figure 1 panel a) - Study Location Map
+
+Note: Two studies assessed ecosystem services (ES) in marine protected areas (MPAs) worldwide and two studies were not location specific. Excluding these, ecosystem services were quantified in 50 different countries.
+
+ES quantified in coastal areas of islands that are overseas territories are mapped onto home countries for this figure. Due to this, we are currently mapping the following locations as (mapping location): Ascension Island (United Kingdom), US Virgin Islands (United States), Hong Kong (China), and others.
+
+The following countries (study counts) are not visualized on the map due to spatial constraints: Saint Vincent (1), Malta (1), Mauritius (1), Seychelles (1), and Singapore (1), and others.
+
+Note that all countries within the UK (England, Ireland, Wales) are being mapped as "United Kingdom".
+
+```{r}
+#| include: false
+
+#prep the data for visualization 
+
+#select the paper ID and two country columns from the inventory sheet
+countries <- inventory_assessed %>% 
+  dplyr:: select(Paper_ID, Loc_country_1,Loc_country_2) 
+
+#stack the two country columns
+country_counts <- cbind(countries[1], stack(countries[2:3]))
+
+#rename column "values" to "country"
+country_counts <- country_counts %>% 
+    rename(country= values)
+
+#remove "ind" column, this is fine because each row is one count for that country
+country_counts <- country_counts %>% 
+    dplyr::select(-ind)
+
+#combine data for multiple countries into the country_counts data
+cc_dat <- dplyr::bind_rows(country_counts, multiple_countries)
+
+#remove specific country column, this is not being used for this map
+cc_dat <- cc_dat %>% 
+    dplyr::select(-specific_location)
+
+#now save these country counts into a new dataframe for use later when looking at countries by study
+Country_dat <- cc_dat
+
+#figure out how many different countries ES were quantified in (54)
+(cc_dat %>% 
+  distinct(country) %>% 
+  count())
+
+#Need to remove from this count: French Southern and Antarctic lands, multiple countries, NA, Not location specific, and Worldwide. The NAs come from the fact we had two country columns in the "inventory" dataframe, so studies that quantified ES for a single country have an "NA" in the second column. 
+
+#get counts for each country. This is the number of studies per country. 
+cc_dat <- cc_dat %>% 
+  group_by(country) %>% 
+  count()
+
+#rename "value" column to "countries" and "n" column to "counts"
+cc_dat <- cc_dat %>%  
+  rename(counts= n) 
+
+#filter out the following rows from the dataset - we have already added in the multiple countries data 
+cc_dat <- cc_dat %>%
+  filter(country != "NA") %>% 
+  filter(country != "Multiple countries") %>% 
+  filter(country != "Not location specific") %>% 
+    filter(country != "Worldwide")
+View(cc_dat)
+
+#redo count of how many different countries ES were quantified in
+(cc_dat %>% 
+  distinct(country) %>% 
+  count())
+#ES were quantified in (50) countries
+ 
+#add in bins for the number of times ES assessed in each country's coastal zone (bins are 1-3, 4-6, 7-9, and 9-13 times, as well as 0)
+cc_dat <- cc_dat %>% 
+    group_by(country) %>%  #for each country
+    mutate(bins = ifelse(counts %in% 1:3, "1-3", #if there are 1-3 counts then label it as bin "1-3"
+                         ifelse(counts %in% 4:6, "4-6", 
+                                ifelse(counts %in% 7:9, "7-9",
+                                       ifelse(counts %in% 10:13, "10-13", "0"))))) #if there are 10-13 counts then label it as bin "10-13", otherwise label it as "0".
+
+#order these bins as factors
+cc_dat <- cc_dat %>% 
+    mutate(bins = factor(bins, levels = c("0", "1-3", "4-6", "7-9","10-13")))
+
+#rename country column to be "name_long" so we can add this metadata to the world dataset for mapping
+cc_dat <- cc_dat %>% 
+    rename(name_long = country)
+```
+
+```{r}
+#| include: false
+#create a map of the world with counts of times ES quantified per country
+
+world <- st_read(system.file("shapes/world.gpkg", package="spData"))
+#glimpse(world) #look at file
+#unique(world$name_long) #look at country names included in world file
+
+#add in data from our cc_dat data frame (counts, bins), joining by country name (name_long)
+world_oe <- left_join(world, cc_dat, by="name_long")
+
+#make the NAs in the bins column 0 for plotting
+world_oe$bins[is.na(world_oe$bins)] <- 0
+
+#Check no NAs left in the dataset, should all be "0"
+unique(world_oe$bins)
+
+#let's also rename the column bins to "Counts" just for ease of plotting.
+#And let's remove data for Antarctica to make plotting easier as well
+world_oe <- world_oe %>% 
+    filter(name_long != "Antarctica") %>% 
+    rename("Study count" = bins)
+```
+
+```{r}
+#| echo: false
+#| fig-height: 4
+#| fig-width: 6
+#| fig-cap: "Map showing number of studies that quantify ecosystem services in the coastal environment of each country"
+#| label: fig-1a-grey
+map <- tm_shape(world_oe)+
+tm_polygons(col="Study count",palette=c("white","#f0f0f0","#bdbdbd","#737373","#252525"),title="Number of studies")
+map
+
+tmap_save(map, "./Figures/ES_map_final.pdf", width= 6, height= 4)
+tmap_save(map, "./Figures/ES_map_final.tiff", width= 6, height= 4, dpi= 700)
+```
+
+### Figure 1 panel b) - Ecosystem service categories and subcategories
+
+Plotting the total number of time each major ecosystem service (ES) category was quantified by papers that met our review criteria.
+
+All 5 categories (including composite) of ES are quantified by studies included in our literature review. And 15 different types of ES subcategories are quantified (not including "NA").
+
+```{r}
+#| include: false
+#Use this code to get colors from the final color palette we selected "YlGnBu" (this palette used for all figures in this paper)
+
+# ES_colors <- hcl.colors(9,"YlGnBu")
+```
+
+```{r}
+#| include: false
+#for these questions we will be focusing on the data collection dataframe called "data"
+
+#Find the count of ES categories listed in the column "ES_cat" in the main dataframe "data"
+ES_cat <- data %>% 
+  count(ES_cat)
+
+#However, a single paper can quantify a single ES category more than once, using different types of metrics
+
+#look at this tabulated data frame
+View(ES_cat)
+
+#rename column "n" to "count" in this dataframe
+ES_cat <- ES_cat %>% 
+  rename(Count = n) 
+
+#check class type of new data frame
+sapply(ES_cat, class) 
+
+#make the Count column numeric
+ES_cat$Count <- as.numeric(ES_cat$Count) 
+#calculate total number of times ES quantified, save value
+Tot_cat_quant <- sum(ES_cat$Count) 
+
+#ES were quantified a total of 313 times by the papers included in this literature review (but note there are still duplicates of the same ES category quantified by a single paper)
+
+#Order the categories for plotting, from the ES category quantified the most to the least
+ES_cat$ES_cat <- factor(ES_cat$ES_cat, levels = c("Cultural","Provisioning","Regulating","Supporting","Composite"))
+```
+
+```{r}
+#| include: false
+#We want to make sure we aren't double counting a service category for the same paper in the literature review
+
+#Organize the data so there is only one count for a service category and paper
+
+#Create a unique ID for a combination of paper and ES category (e.g., Paper 36 and cultural services)
+
+ES_cat_dat <- data %>% #select data from main data file - just the paper ID and ES category columns
+    dplyr::select(Paper_ID, ES_cat) %>% #concatenate the paper ID and ES_cat columns to make a unique ID, add this to that new data frame
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat), remove=FALSE)  %>% #Only keep unique ES_id rows, but keep data in all columns for those unique rows
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id) #Remove that ES_id column that was just added
+
+#So now we have a count of ES_Categories with just one type of category per paper (so now the y axis of the figure can be number of studies)
+```
+
+```{r}
+#| include: false
+#summarize how many times each category was quantified for this new data frame, call this "cat_counts"
+cat_counts <- ES_cat_dat %>% 
+  count(ES_cat)
+```
+
+```{r}
+#| include: false
+#rename column "n" to have the title "Count"
+cat_counts <- cat_counts %>% 
+  rename(Count = n) 
+
+#check class type of new data frame
+sapply(cat_counts, class) 
+
+#make Count column numeric for plotting
+cat_counts$Count <- as.numeric(cat_counts$Count)
+
+#calculate total number of times ES quantified without duplicates, save value
+cat_totals <- sum(cat_counts$Count) 
+
+#this is 225 (when you don't index by study it is a total of 311 times ES are quantified- confirms there were duplicates per paper ID)
+
+#order the categories for plotting with the category most quantified first
+cat_counts$ES_cat <- factor(cat_counts$ES_cat, levels = c("Cultural","Provisioning","Regulating","Supporting","Composite"))
+
+#look at the summary data frame - values reported in text of the manuscript
+View(cat_counts)
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| echo: false
+#| label: fig-1b-cat-counts
+#| fig-cap: "Number of studies that quantify each ecosystem service category; each study can quantify multiple categories of service"
+#| fig-height: 2
+#| fig-width: 8
+
+ggplot(cat_counts, aes(x=ES_cat, y=Count, fill=ES_cat))+
+  geom_bar(stat="identity")+
+    scale_fill_manual(values = c("#005D9E", "#0095AF", "#18BDB0", "#9ADCBB", "#D7F4CF"))+
+  labs(y="Number of studies")+
+  theme_bw()+
+    theme(text= element_text(size=12),
+          panel.border=element_blank(),
+          axis.line=element_line(),
+        legend.position="none",
+        axis.title.x = element_blank(),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x=element_text(size=12),
+        axis.text.y=element_text(size=12))
+ggsave("./Figures/ES_numb-studies_final.tiff", width= 8, height= 2,dpi=700) #save figure
+ggsave("./Figures/ES_numb-studies_final.pdf",  width= 8, height= 2) 
+```
+
+### Figure 1 panel c) - Times ES quantified by habitat type
+
+Habitat data is plotted without the multiple habitats category broken out into respective habitat types.
+
+```{r}
+#| include: false
+
+#Look at the number of times ES were quantified for each habitat type
+#This table counts the rows in the data collection sheet
+(Hab_counts <- data %>% 
+  count(Hab_cat))
+
+#But there are duplicate rows for the same habitat and paper (because different service categories each get a row in dataset)
+```
+
+```{r}
+#| include: false
+#Use the more detailed data from the multiple habitats category now. 
+glimpse(multiple_habs) #look at an overview of this dataframe "multiple_habs"
+```
+
+```{r}
+#| include: false
+#for this figure ignore the rows that have "other" in the "Hab_cat" column ("if_other" column then tells us the specific habitat if it was categorized as "other" in data). We are not breaking out the "other" category for this figure.
+
+#first remove the "if_other" column from the "multiple_habs" dataframe - rename to be "mh_dat"
+mh_dat <- multiple_habs %>% 
+    dplyr::select(-if_other)
+
+#remove duplicate rows from main dataframe based on paper_id and habitat type information
+hab_dat <- data %>% 
+    dplyr::select(Paper_ID, Hab_cat) %>%  #select paper ID and habitat columns from main dataframe called "data"
+    unite(hab_id, sep="_",c(Paper_ID, Hab_cat), remove=FALSE)  %>%  #concatenate the paper ID and habitat columns to make a unique ID for paper & habitat
+    distinct(hab_id, .keep_all = TRUE) %>% #Keep only rows that have a unique habitat ID (what we created), but keep all data for those rows
+    dplyr::select(-hab_id) #Now remove that habitat ID column (only needed to filter data)
+
+#view this data frame. There should be one row per paper, each with a unique habitat type
+View(hab_dat)
+
+#now combine this new dataframe ("hab_dat"), and the multiple habitat dataframe ("mh_dat") by appending rows
+all_habs <- dplyr::bind_rows(hab_dat, mh_dat)
+
+#check unique values for the Habitat category, there should be no duplicates
+unique(all_habs$Hab_cat)
+
+#times ES quantified by habitat type
+(counts <- all_habs %>% 
+    count(Hab_cat))
+```
+
+```{r}
+#| include: false
+#17 studies quantified ES for multiple habs
+#This is approximately 15% - reported this in manuscript text
+17/110
+```
+
+```{r}
+#| include: false
+#delete the multiple habitats rows from the data. These habitats were accounted for by adding in rows from "mh_dat" dataframe earlier
+all_habs <- all_habs %>% 
+    filter(Hab_cat != "multiple habitats")
+
+#retabulate counts of times ES quantified by habitat type
+(hab_dat <- all_habs %>% 
+  count(Hab_cat))
+```
+
+```{r}
+#| include: false
+#times unspecified habitat types were quantified by studies of the total number of studies included in this review
+43/110
+#This is 39% of studies, but not reporting in the text at this time
+```
+
+```{r}
+#| include: false
+#manually order habitat types from largest to smallest (without multiple), for plotting
+hab_dat$Hab_cat <- factor(hab_dat$Hab_cat, levels = c("wetland", "oysters and other bivalves","kelp forests","saltmarsh","beaches and dunes","rocky reefs","mangroves","seagrass","other","coral reefs","unspecified"))
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-1c-habs-mult
+#| fig-cap: "Number of studies that quantify ecosystem services for each focal habitat type; each study can quantify multiple services for multiple habitat types"
+#| fig-height: 5
+#| fig-width: 8
+
+habs_plot <- ggplot(hab_dat, aes(x=Hab_cat,y=n,fill=Hab_cat))+
+  geom_bar(stat="identity")+
+    scale_fill_manual(values = c("#d8d5e2","#d8d5e2", "#d8d5e2", "#d4d1df", "#bebacf", "#a8a3bf","#938caf","#7d749f","#675d8f","#51467f","#3c2f6f","#26185f"))+
+  labs(y="Number of studies", x="Coastal habitat categories")+
+    scale_y_continuous(limits=c(0,60),breaks=c(0,20,40,60))+
+    scale_x_discrete(labels = function(x) str_wrap(x, width = 10))+
+    theme_bw()+
+    theme(text= element_text(size=12),
+          panel.border=element_blank(),
+          axis.line=element_line(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size=12),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x=element_text(size=12,vjust=1,angle=-60,hjust=0),
+        axis.text.y=element_text(size=12),
+        legend.position= "none")
+ggsave("./Figures/hab_mult_counts_final.tiff", width= 8, height= 3, dpi= 700) #save figure
+ggsave("./Figures/hab_mult_counts_final.pdf", width= 8, height= 3)
+habs_plot
+```
+
+## Figure 2: Major ecosystem service categories and associated subcategories
+
+This figure looks at the relationship between major ecosystem service (ES) categories and ES subcategories (@fig-2_cat-subcat). Composite services are not included in this plot as a major ES category.
+
+```{r}
+#| include: false
+#Look at the number of times ES subcategories were quantified across all studies included in literature review (not part of Figure 2 but reported in text of manuscript)
+
+#select the paper ID and three ES subcategory columns from the inventory sheet
+subcategories <- data %>% 
+  dplyr:: select(Paper_ID, ES_subcat_1, ES_subcat_2, ES_subcat_3)
+
+#most papers have just one subcategory per row
+#however, we don't want to triple-count studies that are composite and have all three rows filled out with "NA" (or rows with two NAs)
+
+#stack the three subcategory columns
+subcat_counts <- cbind(subcategories[1], stack(subcategories[2:4])) 
+
+#rename "values" column to "subcategories"
+subcat_counts <- subcat_counts %>%  
+  rename(subcategories= values)
+
+#look at counts of unique subcategories
+unique(subcat_counts$subcategories)
+
+#figure out how many different subcategories are coded for in this analysis
+subcat_counts %>% 
+  distinct(subcategories) %>% 
+  count()
+
+#there are 14 subcategories, as well as "NA" so 15 total
+```
+
+```{r}
+#| include: false
+#Reorganize data so that category and subcategory are captured - this is needed for Figure 2
+
+#select the paper ID, categories, and three ES subcategory columns from the inventory sheet
+cat_subcat <- data %>% 
+  dplyr:: select(Paper_ID, ES_cat, ES_subcat_1, ES_subcat_2, ES_subcat_3)
+
+#most papers have just one subcategory per row
+
+#there should only be "None" in the first column of the data
+unique(data$ES_subcat_1)
+
+#stack the three subcategory columns - there is now a single row for each paper ID, ES_cat, and associated subcategory
+cat_subcat_stack <- cbind(cat_subcat[1:2], stack(cat_subcat[3:5]))
+
+#now summarize the subcategories by associated category type
+
+#rename "values" column to be subcategories
+cat_subcat_stack <- cat_subcat_stack %>% 
+  rename(subcategories = values)
+
+#unique values of subcategories
+unique(cat_subcat_stack$subcategories)
+
+#remove all rows that have "NA" and "None" as this is indicating no subcategory
+cat_subcat_stack <- cat_subcat_stack %>% 
+    filter(subcategories != "NA") %>% 
+    filter(subcategories != "None")
+
+#single Papers can have rows with the same category and subcategory (this is because there are different rows in the data for different habitat types)
+
+#remove "ind" or index column
+cat_subcat_stack <- cat_subcat_stack %>% 
+    dplyr::select(-ind)
+
+#Now remove duplicated rows from this dataset
+cat_subcat_filtered <- cat_subcat_stack %>% 
+    distinct(Paper_ID, ES_cat, subcategories, .keep_all=TRUE)
+
+#so now what is left is rows with unique values for Paper ID, ES category and subcategory
+
+cat_subcat_stack <- cat_subcat_filtered %>% #remove Paper ID from this dataframe -- will want it later though
+#and rename dataframe back to cat_subcat_stack
+  dplyr:: select(-Paper_ID)
+#View(cat_subcat_stack)
+
+#now there is a row for each category and subcategory combination, summarize this data as counts of how many times ES_cats and subcategories were quantified
+(cat_subcat_plot <- cat_subcat_stack %>% 
+  group_by(ES_cat, subcategories) %>% 
+  count())
+```
+
+```{r}
+#| include: false
+#the naming of subcategories needs to be shortened for plotting
+
+#rename these subcategories
+cat_subcat_plot$subcategories <- str_replace_all(cat_subcat_plot$subcategories,'Physical and psychological experiences','Physical and psychological')
+
+cat_subcat_plot$subcategories <- str_replace_all(cat_subcat_plot$subcategories,'Medicinal, biochemical and genetic resources','Medicinal and genetic')
+
+cat_subcat_plot$subcategories <- str_replace_all(cat_subcat_plot$subcategories,'Regulation of climate','Climate')
+
+cat_subcat_plot$subcategories <- str_replace_all(cat_subcat_plot$subcategories,'Regulation of coastal water quality','Coastal water quality')
+
+cat_subcat_plot$subcategories <- str_replace_all(cat_subcat_plot$subcategories,'Regulation of hazards and extreme events','Hazards and extreme events')
+
+cat_subcat_plot$subcategories <- str_replace_all(cat_subcat_plot$subcategories,'Regulation of detrimental organisms and biological processes','Detrimental organisms')
+
+cat_subcat_plot$subcategories <- str_replace_all(cat_subcat_plot$subcategories,'Formation, protection, and decontamination of soils and sediments','Formation and decontamination')
+
+cat_subcat_plot$subcategories <- str_replace_all(cat_subcat_plot$subcategories,'Habitat creation and maintenance','Habitat creation')
+
+#reorder subcategories for plotting
+cat_subcat_plot$subcategories <- factor(cat_subcat_plot$subcategories, levels = c("Physical and psychological","Learning and inspiration",  "Supporting identities", "Maintenance of options","Food and feed","Materials and assistance","Medicinal and genetic","Climate","Coastal water quality","Hazards and extreme events","Detrimental organisms","Formation and decontamination","Habitat creation"))
+
+#make sure NA not showing up 
+unique(cat_subcat_plot$subcategories)
+
+#remove rows that have composite services
+cat_subcat_plot <- cat_subcat_plot %>% 
+    filter(ES_cat != "Composite") 
+
+#make sure Composite has been successfully removed as a major ES category (for plotting)
+unique(cat_subcat_plot$ES_cat)
+
+#order the major ES categories, for plotting
+cat_subcat_plot$ES_cat <- factor(cat_subcat_plot$ES_cat, levels = c("Cultural","Provisioning","Regulating","Supporting"))
+```
+
+```{r}
+#| include: false
+#make four different data frames for each category (for plotting later), with only data for that specific service type
+csc_cultural <- filter(cat_subcat_plot,ES_cat == "Cultural")
+
+csc_prov <- filter(cat_subcat_plot, ES_cat == "Provisioning")
+
+csc_reg <- filter(cat_subcat_plot, ES_cat == "Regulating")
+
+csc_supp <- filter(cat_subcat_plot, ES_cat == "Supporting")
+```
+
+```{r}
+#| echo: false
+#making a petal plot, requires the following prepatory steps
+
+cat_subcat_plot = cat_subcat_plot %>% arrange(ES_cat, -n)
+
+#save copy of "cat_subcat_plot" dataframe as "plt_data" for use later
+plt_data <- cat_subcat_plot
+
+# Set a number of 'empty bars' to add at the end of each group
+empty_bar <- 2
+to_add <- data.frame( matrix(NA, empty_bar*nlevels(cat_subcat_plot$ES_cat), ncol(cat_subcat_plot)) )
+colnames(to_add) <- colnames(cat_subcat_plot)
+to_add$ES_cat <- rep(levels(cat_subcat_plot$ES_cat), each=empty_bar)
+cat_subcat_plot <- rbind(cat_subcat_plot, to_add)
+cat_subcat_plot <- cat_subcat_plot %>% arrange(ES_cat)
+cat_subcat_plot$id <- seq(1, nrow(cat_subcat_plot))
+
+# Get the name and the y position of each label
+label_data <- cat_subcat_plot
+number_of_bar <- nrow(label_data)
+angle <- 90 - 360 * (label_data$id-0.5) /number_of_bar     #Subtract 0.5 because the letter must have the angle of the center of the bars. Not extreme right (1) or extreme left (0)
+label_data$hjust <- ifelse( angle < -90, 1, 0)
+label_data$angle <- ifelse(angle < -90, angle+180, angle)
+
+# prepare a data frame for base lines
+base_data <- cat_subcat_plot %>% 
+  group_by(ES_cat) %>% 
+  summarize(start=min(id), end=max(id)-empty_bar) %>% 
+  rowwise() %>% 
+  mutate(title=mean(c(start, end)))
+
+# prepare a data frame for grid (scales)
+grid_data <- base_data
+grid_data$end <- grid_data$end[ c( nrow(grid_data), 1:nrow(grid_data)-1)] + 1
+grid_data$start <- grid_data$start -1
+grid_data <- grid_data[-1,]
+
+#View(grid_data)
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-2_cat-subcat
+#| fig-height: 5
+#| fig-width: 8
+#| fig-cap: "Number of times each subcategory of societal benefit is quantified for each ecosystem service category"
+
+ggplot(cat_subcat_plot, aes(x=as.factor(id), y=n, fill=ES_cat)) +  # Note that id is a factor. If x is numeric, there is some space between the first bar
+  
+  geom_bar(aes(x=as.factor(id), y=n, fill=ES_cat), stat="identity", alpha=0.5) +
+    scale_fill_manual(values=c("#005D9E", "#0095AF", "#18BDB0", "#9ADCBB"))+
+  
+  # Add a val=100/75/50/25 lines. Do it at the beginning to make sure barplots are visualized over these lines.
+  geom_segment(data=grid_data, aes(x = end, y = 80, xend = start, yend = 80), colour = "grey", alpha=1, size=0.4 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 60, xend = start, yend = 60), colour = "grey", alpha=1, size=0.4 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 40, xend = start, yend = 40), colour = "grey", alpha=1, size=0.4 , inherit.aes = FALSE ) +
+  geom_segment(data=grid_data, aes(x = end, y = 20, xend = start, yend = 20), colour = "grey", alpha=1, size=0.4 , inherit.aes = FALSE ) +
+  
+  # Add text showing the value of each 100/75/50/25 lines
+  annotate("text", x = rep(max(cat_subcat_plot$id),4), y = c(20, 40, 60, 80), label = c("20", "40", "60", "80") , color="grey", size=4 , angle=0, fontface="bold", hjust=1) +
+  
+#build plot using ggplot package
+  geom_bar(aes(x=as.factor(id), y=n, fill=ES_cat), stat="identity", alpha=0.5) +
+  ylim(-65,120) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = unit(rep(-1,4), "cm") 
+  ) +
+  coord_polar() + 
+  geom_text(data=label_data, aes(x=id, y=n+10, label=stringr::str_wrap(subcategories,20), hjust=hjust), color="black", fontface="bold",alpha=0.6, size=4, angle= label_data$angle, inherit.aes = FALSE ) +
+
+    
+# Add base line information
+  geom_segment(data=base_data, aes(x = start, y = -5, xend = end, yend = -5), colour = "black", alpha=0.8, linewidth=0.6 , inherit.aes = FALSE )  +
+  geom_text(data=base_data, aes(x = title, y = -18, label=ES_cat), hjust=c(1,1,0,0), colour = "black", alpha=0.8, size=5, fontface="bold", inherit.aes = FALSE)
+
+ggsave("./Figures/cat_subcat_circle-bar_final.tiff", width= 10, height= 10,dpi=700) #save figure
+ggsave("./Figures/cat_subcat_circle-bar_final.pdf", width= 10, height= 10)
+```
+
+## Figure 3: Habitat types and ecosystem service categories
+
+This figure looks at whether there are types of habitats for which certain categories of services are generally quantified. To visualize this we will use a Sankey diagram.
+
+The Sankey diagram includes all habitat data (including multiple habitats and unspecified) as well as all service categories (including Composite) (@fig-3).
+
+```{r}
+#| include: false
+#For this figure we are using the dataframe "mult_habs_cats" with multiple habitat information broken out and the associated ES category 
+#there is a single row for the Paper_ID, habitat, and ES category (no duplicate rows)
+
+#for this figure the goals columns are not needed (added so we can later summarize habitats, ES_cats and goals)
+mult_habs_cats2 <- mult_habs_cats %>% 
+    dplyr::select(Paper_ID,Hab_cat,ES_cat) #select only needed columns
+
+#rename this dataframe mult_habs_cats2
+
+#Select necessary columns from main dataframe (Paper_ID, Hab_cat, ES_cat)
+hc_dat <- data %>% 
+    dplyr::select(Paper_ID,Hab_cat,ES_cat)
+
+#Remove duplicate rows where the same paper has the same Hab_cat and ES_cat (to avoid double counting)
+hc_dat_filtered <- hc_dat %>% 
+    distinct(Paper_ID, Hab_cat, ES_cat, .keep_all=TRUE)
+
+#now append these two data frames
+habs_cats <- dplyr::bind_rows(hc_dat_filtered, mult_habs_cats2)
+
+#summarize new dataframe
+habs_cats <- habs_cats %>% 
+    group_by(Hab_cat) %>% 
+    count(ES_cat)
+
+#remove rows with unspecified, and multiple as Habitat categories
+habs_cats <- habs_cats %>% 
+    filter(Hab_cat != "unspecified") %>% 
+    filter(Hab_cat != "multiple habitats")
+```
+
+```{r}
+#| include: false
+#begin to build Sankey diagram
+
+#First create a nodes dataframe which numbers source nodes (i.e. ES categories) and the destination nodes (i.e. Habitat types), starting at zero
+
+#extract the unique habitats
+habitats <- unique(as.character(habs_cats$Hab_cat))
+# There are 10 habitats
+
+#order the habitats
+habitats <- habitats[order(factor(habitats,levels = c("wetland","kelp forests", "oysters and other bivalves","saltmarsh","beaches and dunes","seagrass","rocky reefs","mangroves","other","coral reefs")))]
+
+#extract the unique services
+services <- unique(as.character(data$ES_cat))
+# There are  5 services
+
+#order the categories
+services <- services[order(factor(services, levels = c("Cultural","Provisioning","Regulating","Supporting","Composite")))]
+
+#now create the nodes used in the Sankey itself
+nodes <- data.frame(node=c(0:14),
+                    name=c(services,habitats))
+
+nodes$group <- gsub(" ", "-", nodes$name)
+
+#look at types of data in node dataframe
+sapply(nodes, class)
+```
+
+```{r}
+#| include: false
+
+#Create a links dataframe which itemizes each row using a source, target, and value column
+
+#Tell R to make a new column with the source node values for different services
+links <- habs_cats %>% 
+    mutate(source = case_when (ES_cat == "Cultural" ~ 0, 
+                               ES_cat == "Composite" ~4,
+                               ES_cat == "Provisioning" ~ 1,
+                               ES_cat == "Regulating" ~2,
+                               ES_cat == "Supporting" ~3))
+
+#Next make another column with the target node values for the different types of habitats
+links <- links %>% 
+    mutate(target = case_when (
+           Hab_cat == "kelp forests" ~6, 
+           Hab_cat == "other"~13,
+           Hab_cat == "seagrass"~10,
+           Hab_cat == "coral reefs"~14, 
+           Hab_cat == "rocky reefs"~11,
+           Hab_cat == "mangroves"~12,
+           Hab_cat == "beaches and dunes"~9,
+           Hab_cat == "saltmarsh"~8,
+           Hab_cat == "oysters and other bivalves"~7,
+           Hab_cat == "wetland"~5))
+
+#rename the N column (which is counts of the number of times that service was quantified in each habitat type) to values. This is how we will weight the Senke diagram
+
+links <- links %>% 
+    rename(value = n)
+
+#ungroup by Hab_cat in this data frame
+links <- links %>% 
+    ungroup 
+
+#remove Hab_cat and ES_cat columns
+links <- links %>% 
+    dplyr::select(-Hab_cat) %>% 
+    dplyr::select(-ES_cat)
+#links
+
+#reorder columns in links dataframe
+col_order <- c("source", "target", "value")
+links <- links[,col_order]
+#links
+
+#add a links group so that the colors can be set
+links <- links %>% 
+    mutate(group = case_when ( source == 0 ~ "group_0",
+                               source == 1 ~ "group_1", 
+                               source == 2 ~ "group_2",
+                               source == 3 ~ "group_3",
+                               source == 4 ~ "group_4"))
+```
+
+```{r}
+#| include: false
+#standardized colors used for Sankey 
+#"#005D9E", "#0095AF", "#18BDB0", "#9ADCBB", "#D7F4CF"
+
+#standardized colors used for habitats
+#"#d8d5e2","#d8d5e2", "#d8d5e2", "#d4d1df", "#bebacf", "#a8a3bf","#938caf","#7d749f","#675d8f","#51467f","#3c2f6f","#26185f"
+```
+
+```{r}
+#| include: false
+groupColor <- c("#005D9E","#0095AF","#18BDB0","#D7F4CF","#9ADCBB","#005D9E","#0095AF","#18BDB0","#9ADCBB","#D7F4CF","#d8d5e2", "#d4d1df", "#bebacf", "#a8a3bf","#938caf","#7d749f","#675d8f","#51467f","#3c2f6f","#26185f")
+groupColor <- paste0('"',paste(groupColor, collapse = '", "'),'"')
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Sankey network diagram for ES categories and habitat types"
+#| label: fig-3
+#| fig-height: 5
+#| fig-width: 8
+
+s=sankeyNetwork(Links=links, Nodes=nodes,
+                Source="source", Target="target",
+                Value="value",NodeID = "name",
+                fontSize=12, nodeWidth=40, 
+                NodeGroup = "group", LinkGroup = "group",colourScale = paste0('d3.scaleOrdinal().range([',groupColor,'])'))
+
+s
+#to get a jpeg - manually save using R (shows up in Viewer)
+
+# save Sankey as an html
+saveNetwork(s, "sankey.html")
+
+#to save as pdf open html file using web browser, and then select print, and save to pdf.
+
+# Convert it to png
+#webshot("sankey.html","sankey.png", vwidth = 1000, vheight = 900)
+```
+
+## Figure 4: Metrics by service types
+
+What metrics are most frequently used and to what extent is the literature considering economic and human wellbeing benefits of coastal ecosystems in MPAs? (and relationship with services)? (@fig-4).
+
+```{r}
+#| include: false
+# create new data frame called "data_metrics" to preserve original "data" file
+data_metrics <- data
+
+# check class types
+sapply(data_metrics, class)
+
+#how often are the different metrics used to quantify ES?
+#need to sum these metric columns
+(metric_counts <- data_metrics %>% 
+    dplyr::select(Biophysical, Monetary, Health_outcome,Beneficiary_weighted_outcome, Self_reported, Informed_ranking) %>% 
+    summarise_all(list(sum),na.rm=TRUE))
+
+#the problem is that there are likely duplicates between the same study using the same metric and looking at the same ES_category
+#filter out these duplicates
+data_metrics <- data_metrics %>% 
+    dplyr::select(Paper_ID, ES_cat, Biophysical, Monetary, Health_outcome, Beneficiary_weighted_outcome, Self_reported, Informed_ranking)
+
+#filter out duplicates across all rows
+data_metrics_filtered <- data_metrics %>% 
+    distinct(Paper_ID, ES_cat, Biophysical, Monetary, Health_outcome, Beneficiary_weighted_outcome, Self_reported, Informed_ranking, .keep_all=TRUE)
+
+#summarize the data for each metric individually - this is the easiest way to then plot the data later
+# How often Biophysical metrics are used to quantify the different ES categories? 
+cat_bio <- data_metrics_filtered %>%
+    group_by(ES_cat) %>% 
+    count(Biophysical)
+
+#remove NAs
+cat_bio <- cat_bio %>% 
+    filter(Biophysical != "NA")
+
+#change biophysical column from "Biophysical" to "Metric Type"
+cat_bio <- cat_bio %>% 
+    rename(Metric_type = Biophysical)
+
+#change "1" to "Biophysical" in that column
+cat_bio$Metric_type <- str_replace_all(cat_bio$Metric_type,'1','Biophysical')
+
+# Do this for Monetary metrics:
+cat_money <- data_metrics_filtered %>%
+    group_by(ES_cat) %>% 
+    count(Monetary)
+
+#remove NAs
+cat_money <- cat_money %>% 
+    filter( Monetary != "NA")
+
+#prep this data frame for plotting all metrics together
+#change monetary column from "Monetary" to "Metric Type"
+cat_money <- cat_money %>% 
+    rename(Metric_type = Monetary)
+
+#change "1" to "Monetary" in that column
+cat_money$Metric_type <- str_replace_all(cat_money$Metric_type,'1','Monetary')
+
+# Do this for Health outcome metrics:
+cat_health <- data_metrics_filtered %>%
+    group_by(ES_cat) %>% 
+    count(Health_outcome)
+
+#remove NAs
+cat_health <- cat_health %>% 
+    filter( Health_outcome != "NA")
+
+#prep this data frame for plotting all metrics together
+#change monetary column from "Health_outcome" to "Metric Type"
+cat_health <- cat_health %>% 
+    rename(Metric_type = Health_outcome)
+
+#change "1" to "Health_outcome" in that column
+cat_health$Metric_type <- str_replace_all(cat_health$Metric_type,'1','Health_outcome')
+
+# How often are Beneficiary Weighted Outcome metrics used to quantify the different ES categories? 
+cat_bene <- data_metrics_filtered %>%
+    group_by(ES_cat) %>% 
+    count(Beneficiary_weighted_outcome)
+
+#remove NAs
+cat_bene <- cat_bene %>% 
+    filter(Beneficiary_weighted_outcome != "NA")
+#prep this data frame for plotting all together
+
+#change Beneficiary weighted outcome column from "Beneficiary_weighted_outcome" to "Metric Type"
+cat_bene <- cat_bene %>% 
+    rename(Metric_type = Beneficiary_weighted_outcome)
+
+#change "1" to "Beneficiary_weighted" in that column
+cat_bene$Metric_type <- str_replace_all(cat_bene$Metric_type,'1','Beneficiary_weighted')
+
+# How often are Self Reported metrics used to quantify the different ES categories? 
+cat_SR <- data_metrics_filtered %>%
+    group_by(ES_cat) %>% 
+    count(Self_reported)
+
+#remove NAs
+cat_SR <- cat_SR %>% 
+    filter(Self_reported != "NA")
+#prep this data frame for plotting all together
+
+#change Self reported column from "Self_reported" to "Metric Type"
+cat_SR <- cat_SR %>% 
+    rename(Metric_type = Self_reported)
+
+#change "1" to "Self_reported" in that column
+cat_SR$Metric_type <- str_replace_all(cat_SR$Metric_type,'1','Self_reported')
+
+# How often are Informed Ranking metrics used to quantify the different ES categories? 
+cat_IR <- data_metrics_filtered %>%
+    group_by(ES_cat) %>% 
+    count(Informed_ranking)
+
+#remove NAs
+cat_IR <- cat_IR %>% 
+    filter(Informed_ranking != "NA")
+
+#prep this data frame for plotting all together
+#change Self reported column from "Informed_ranking" to "Metric Type"
+cat_IR <- cat_IR %>% 
+    rename(Metric_type = Informed_ranking)
+
+#change "1" to "Informed_ranking" in that column
+cat_IR$Metric_type <- str_replace_all(cat_IR$Metric_type,'1','Informed_ranking')
+
+# to plot all metric types together first combine all data frames with individual metrics
+all_metrics_plot <- dplyr:: bind_rows(cat_bio, cat_money, cat_health, cat_bene, cat_SR, cat_IR)
+
+#check unique metric types in dataframe
+unique(all_metrics_plot$Metric_type)
+
+#rename metrics to be consistent and useful for plotting
+
+#replace all Beneficiary_weighted with Beneficiary weighted
+all_metrics_plot$Metric_type <- str_replace_all(all_metrics_plot$Metric_type,'Beneficiary_weighted','Beneficiary weighted')
+
+all_metrics_plot$Metric_type <- str_replace_all(all_metrics_plot$Metric_type,'Informed_ranking','Informed ranking')
+
+all_metrics_plot$Metric_type <- str_replace_all(all_metrics_plot$Metric_type,'Self_reported','Self reported')
+
+all_metrics_plot$Metric_type <- str_replace_all(all_metrics_plot$Metric_type,'Health_outcome','Health outcome')
+
+#View(all_metrics_plot)
+
+#add row with Informed Ranking, composite 0
+all_metrics_plot[nrow(all_metrics_plot)+1,]<-list("Composite", "Informed ranking",0)
+
+#add row with Health outcome, cultural 0
+all_metrics_plot[nrow(all_metrics_plot)+1,]<-list("Cultural", "Health outcome",0)
+
+#Another row with Health outcome, regulating 0
+all_metrics_plot[nrow(all_metrics_plot)+1,]<-list("Regulating", "Health outcome",0)
+
+#Another row with Health outcome, supporting 0
+all_metrics_plot[nrow(all_metrics_plot)+1,]<-list("Supporting", "Health outcome",0)
+
+#determine the order of the metrics
+all_metrics_plot$Metric_type <- factor(all_metrics_plot$Metric_type, levels = c("Health outcome", "Informed ranking", "Beneficiary weighted","Biophysical","Monetary","Self reported"))
+
+#and order of ES categories
+all_metrics_plot$ES_cat <- factor(all_metrics_plot$ES_cat, levels = c("Cultural", "Provisioning","Regulating","Supporting", "Composite"))
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "Number of times different metrics were used to quantify different ES categories"
+#| label: fig-4
+#| fig-height: 5
+#| fig-width: 10
+
+ggplot(all_metrics_plot,aes(x=Metric_type, y=n, fill=ES_cat))+
+    geom_bar(position="dodge",stat="identity")+
+    scale_y_continuous(limits=c(0,60),breaks=c(0,10,20,30,40,50,60))+
+    scale_fill_manual(values = c("#005D9E", "#0095AF", "#18BDB0", "#9ADCBB","#D7F4CF"))+
+    labs(y="Number of studies", x="Metric type")+
+    labs(fill = "Ecosystem service categories")+
+    theme_bw()+
+    theme(text= element_text(size=12),
+          panel.border=element_blank(),
+          axis.line=element_line(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_text(size=12),
+        panel.grid=element_blank(),
+        axis.text.x=element_text(size=12),
+        axis.text.y=element_text(size=12),
+        legend.text=element_text(size=12),
+        legend.position="top")
+ #   guides(fill=guide_legend(nrow=2, byrow=TRUE))
+ggsave("./Figures/metrics_EScat_final.tiff", width= 12, height= 5, dpi = 700) #save figure
+ggsave("./Figures/metrics_EScat_final.pdf", width= 12, height= 5)
+```
+
+## Figure 5: study goals
+
+To what extent are studies aiming to inform MPA siting and design, management, financing, or monitoring? (@fig-5)
+
+```{r}
+#| include: false
+# create new data frame called "data_goal" to preserve "data" dataframe
+data_goal <- data
+
+#how often are the different metrics used to quantify ES?
+
+#Get counts of study goal types sorting by Paper_ID column
+goal_bypaper <- data_goal %>% 
+    group_by(Paper_ID) %>% 
+    count(Siting_Design, Management, Financing, Monitoring_evaluation, No_stated_management_objectives_or_implications)
+
+#ungroup 
+goal_bypaper <- goal_bypaper %>% 
+    ungroup()
+
+#sum by the columns, removing the Paper_ID and removing NAs when summed
+goal_bypaper <- goal_bypaper %>% 
+    dplyr::select(-Paper_ID) %>% 
+    summarise_all(list(sum),na.rm=TRUE)
+
+#create dataframe for plotting this data
+goal_types <- c("Siting and design", "Management action or strategy", "Financing","Monitoring and evaluation","No stated management objectives or implications")
+counts <- c(22, 74, 10, 12, 7)
+goal.df <- data.frame(goal_types,counts)
+
+#view dataframe
+View(goal.df)
+
+#order the goals from smallest to largest
+#order the categories
+goal.df$goal_types <- factor(goal.df$goal_types, levels = c("No stated management objectives or implications","Financing","Monitoring and evaluation","Siting and design","Management action or strategy"))
+
+#following summary statistics reported in manuscript:
+
+#74 of 110 papers quantified ES to inform management of MPAs
+74/110*100
+
+#22 of 110 papers quantified ES to inform siting and design 
+22/110*100
+
+#12 papers quantified ES to inform monitoring of MPAs
+12/110*100
+
+#7 papers quantified ES to evaluate MPA outcomes (No stated management objectives or implications)
+7/110*100
+
+#10 papers quantified ES to inform financing 
+10/110*100
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-cap: "MPA aspect that the quantification of services aimed to inform. Papers can have more than one goal from quantification."
+#| label: fig-5
+#| fig-height: 4
+#| fig-width: 6
+
+ggplot(goal.df, aes(x=goal_types, y=counts, fill=counts))+
+  geom_bar(stat="identity", fill=c("#636363","#525252","#bdbdbd","#969696","#d9d9d9"))+
+    scale_x_discrete(labels=function(goal_types)
+        stringr::str_wrap(goal_types, width=16))+
+    scale_y_continuous(breaks=c(0,10,20,30,40,50,60,70))+
+  labs(y="Number of studies")+
+  theme_bw()+
+    theme(text= element_text(size=12),
+        panel.grid=element_blank(),
+        legend.position="none",
+        axis.title.x = element_blank(),
+        axis.text.x=element_text(size=12),
+        axis.text.y=element_text(size=12))
+ggsave("./Figures/goal_counts.tiff", width= 8, height= 4, dpi = 700) #save figure
+ggsave("./Figures/goal_counts.pdf", width= 8, height= 4)
+```
+
+# Summary Statistics for reporting in-text
+
+## Number of metrics and number of ES categories quantified by papers
+
+How many different metrics do studies use to quantify ecosystem services? And how many different categories of services do studies quantify?
+
+Note that the number of studies in the lit review is 110. And that if the studies assessed all 5 categories of service (main four and composite) the data was manually changed it be 4 categories.
+
+```{r}
+#| include: false
+#determine how many metrics each paper uses
+metric_papers <- data_metrics %>% 
+    dplyr::select(Paper_ID, Biophysical, Monetary, Beneficiary_weighted_outcome, Self_reported, Informed_ranking) 
+
+#stack the six metric columns
+metric_papers <- cbind(metric_papers[1], stack(metric_papers[2:6])) 
+
+#rename ind column to be "Metric_type"
+metric_papers <- metric_papers %>% 
+    rename(Metric_type = ind)
+
+#remove rows with NA in the value column 
+metric_papers <- metric_papers %>% 
+    filter(values != "NA")
+
+#remove duplicate rows so one row per paper and per metric
+metric_papers <- metric_papers %>% 
+    distinct()
+
+#now there's one row per metric type per paper so group by paper
+metric_papers <- metric_papers %>% 
+    group_by(Paper_ID) %>% 
+    count()
+
+#rename column "n" to Metric_numb
+metric_papers <- metric_papers %>% 
+    rename(Metric_num = n)
+
+#add this data back to the main dataframe "data_metrics" - this means that there is a row for each paper with how many metrics are used 
+#to not double count papers, will need to be grouped by paper ID
+data_metrics <- dplyr::full_join(data_metrics, metric_papers, by="Paper_ID")
+
+#confirm 110 papers included
+length(unique(data_metrics$Paper_ID))
+
+#also add this metric to the original data file
+data <- dplyr::full_join(data, metric_papers, by="Paper_ID")
+
+#prep data to plot number of subcategories each paper quantified
+study_numb_metrics <- data_metrics %>% 
+    group_by(Paper_ID) %>% 
+    count(Metric_num)
+
+#summarize the number of metrics used by the number of studies
+study_numb_metrics <- study_numb_metrics %>% 
+    group_by(Metric_num) %>% 
+    count()
+
+#rename the column "n" to "number_of_studies"
+study_numb_metrics <- study_numb_metrics %>% rename(Number_of_studies = n)
+
+#sum total number of studies (should add to 110- it does)
+sum(study_numb_metrics$Number_of_studies)
+
+#53 of 110 studies used just one metric - value reported in manuscript
+53/110
+```
+
+```{r}
+#| include: false
+#count the number of different service types each paper assessed (this collapses the information from the prior table)
+Numb_cats <- data %>% 
+  group_by(Paper_ID) %>% 
+  count(ES_cat) %>% 
+  count(Paper_ID)
+
+#append the number of services each paper quantified back to the main dataframe called "data"
+
+#First change the column name from "n" to "Cat_num"
+Numb_cats <- Numb_cats %>% rename(ES_cat_num = n)
+
+#Paper_ID will be used to add this data back to the main dataframe "data"
+
+data <- dplyr::full_join(data, Numb_cats, by="Paper_ID")
+#View(data)
+
+#change everything that is 5 types of metrics back to 4 (this means that composite is not another separate type)
+#to do this make the column character, use the str_replace_all() function, and change back to an integer
+Numb_cats$ES_cat_num <- as.character(Numb_cats$ES_cat_num)
+Numb_cats$ES_cat_num <- str_replace_all(Numb_cats$ES_cat_num,"5","4")
+Numb_cats$ES_cat_num <- as.integer(Numb_cats$ES_cat_num)
+
+#get data frame with number of ES categories assessed and the number of studies 
+study_numb_cats <- Numb_cats %>% 
+  group_by(ES_cat_num) %>% 
+  count()
+
+#how many studies assessed just one category of service? Reported this value in the manuscript
+55/110
+
+#rename column from n to "Number_of_studies"
+study_numb_cats <- study_numb_cats %>% rename(Number_of_studies = n)
+
+sum(study_numb_cats$Number_of_studies)
+```
+
+## Number of papers that evaluate single ES categories/ use single metrics
+
+Here we evaluate papers that quantified a single ES type, or used a single metric to quantify ES.
+
+```{r}
+#| include: false
+#for reporting in the manuscript: 
+
+#What is the breakdown of the studies that only looked at one ES category? (what was the ES category assessed)
+
+#This information can be found in the dataframe called "data"
+
+#Filter down to studies that looked at one category
+one_cat <- data %>% 
+    filter(ES_cat_num ==1)
+
+#remove duplicate rows so one row per paper and per metric (can do this by just Paper_ID because each row for the same paper has the same metric)
+one_cat <- one_cat %>% 
+    distinct(Paper_ID, .keep_all=TRUE)
+
+#counts of ES category looked at by papers that evaluated just one ES cat in total
+(one_cat_counts <- one_cat %>%
+  count(ES_cat))
+
+#breakdown of number of metrics used by papers that quantified just one ES cat
+(one_cat_metrics <- one_cat %>% 
+  count(Metric_num))
+
+#What is the breakdown of the studies that only looked at one metric (what ES categories were assessed)
+
+#select rows in data where metric number was 1
+one_metric <- data %>% 
+    filter(Metric_num ==1)
+
+#remove duplicate rows so one row per paper and per metric
+one_metric <- one_metric %>% 
+    distinct(Paper_ID, .keep_all=TRUE)
+
+#summarize findings
+(one_metric_counts <- one_metric %>% 
+    dplyr::select(Biophysical, Monetary, Health_outcome, Beneficiary_weighted_outcome, Self_reported, Informed_ranking) %>% 
+    summarise_all(list(sum),na.rm=TRUE))
+```
+
+## MPA Goals by ES categories
+
+```{r}
+#| include: false
+
+#What is the relationship between study goals and type of ES quantified? 
+
+#What ES categories did studies quantify that had a goal of MPA siting and design? 
+
+#cut down this data frame to just rows that have a "1" for MPA Siting and design
+SD_cats <- data %>% 
+    filter(Siting_Design == 1)
+
+#select data from main data file - just the paper ID and ES category columns
+#concatenate the paper ID and ES_cat columns to make a unique ID, add this to that new data frame
+#Only keep unique ES_id rows, but keep data in all columns for those unique rows
+#Remove that ES_id column that was just added
+SD_cats <- SD_cats %>% 
+    dplyr::select(Paper_ID, ES_cat, Hab_cat) %>% 
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat), remove=FALSE)  %>% 
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id)
+
+#number of distinct Paper_IDs in dataframe
+n_distinct(SD_cats$Paper_ID)
+
+#summarize how many times each category was quantified for this new data frame, call this new dataframe "SD_counts"
+SD_counts <- SD_cats %>% 
+  count(ES_cat)
+
+#Look at the services quantified by papers looking to inform MPA Management
+
+#cut down this data frame to just rows that have a "1" for MPA Management
+M_cats <- data %>% 
+    filter(Management == 1)
+
+#select data from main data file - just the paper ID and ES category columns
+#concatenate the paper ID and ES_cat columns to make a unique ID, add this to that new data frame
+#Only keep unique ES_id rows, but keep data in all columns for those unique rows
+#Remove that ES_id column that was just added
+M_cats <- M_cats %>% 
+    dplyr::select(Paper_ID, ES_cat,Hab_cat) %>% 
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat), remove=FALSE)  %>% 
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id)
+
+n_distinct(M_cats$Paper_ID)
+
+#summarize how many times each category was quantified for this new data frame, call this cat_counts
+M_counts <- M_cats %>% 
+  count(ES_cat)
+
+#do this for the financing goal studies
+#cut down this data frame to just rows that have a "1" for MPA Financing
+F_cats <- data %>% 
+    filter(Financing == 1)
+
+#select data from main data file - just the paper ID and ES category columns
+#concatenate the paper ID and ES_cat columns to make a unique ID, add this to that new data frame
+#Only keep unique ES_id rows, but keep data in all columns for those unique rows
+#Remove that ES_id column that was just added
+F_cats <- F_cats %>% 
+    dplyr::select(Paper_ID, ES_cat,Hab_cat) %>% 
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat), remove=FALSE)  %>% 
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id)
+
+#summarize how many times each category was quantified for this new data frame, call this cat_counts
+F_counts <- F_cats %>% 
+  count(ES_cat)
+
+#do this for the Monitoring and evaluation studies
+#so cut down this data frame to just rows that have a "1" for MPA Monitoring and Evaluation
+ME_cats <- data %>% 
+    filter(Monitoring_evaluation == 1)
+
+#select data from main data file - just the paper ID and ES category columns
+#concatenate the paper ID and ES_cat columns to make a unique ID, add this to that new data frame
+#Only keep unique ES_id rows, but keep data in all columns for those unique rows
+#Remove that ES_id column that was just added
+ME_cats <- ME_cats %>% 
+    dplyr::select(Paper_ID, ES_cat,Hab_cat) %>% 
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat), remove=FALSE)  %>% 
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id)
+
+
+#summarize how many times each category was quantified for this new data frame, call this cat_counts
+ME_counts <- ME_cats %>% 
+  count(ES_cat)
+
+#Now let's do this for the "no stated management objectives or implications" category
+#so cut down this data frame to just rows that have a "1" for that category
+OE_cats <- data %>% 
+    filter(No_stated_management_objectives_or_implications == 1)
+
+#select data from main data file - just the paper ID and ES category columns
+#concatenate the paper ID and ES_cat columns to make a unique ID, add this to that new data frame
+#Only keep unique ES_id rows, but keep data in all columns for those unique rows
+#Remove that ES_id column that was just added
+OE_cats <- OE_cats %>% 
+    dplyr::select(Paper_ID, ES_cat,Hab_cat) %>% 
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat), remove=FALSE)  %>% 
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id)
+
+#summarize how many times each category was quantified for this new data frame, call this cat_counts
+OE_counts <- OE_cats %>% 
+  count(ES_cat)
+
+#look at final summary table
+View(OE_counts)
+```
+
+## MPA Goals by ES categories and Habitats
+
+```{r}
+#| include: false
+
+#What is the relationship between study goal, ES category, and habitat?
+
+#start with papers with a goal to inform MPA management
+
+#Cut down the data frame to just rows that have a "1" for MPA Management
+M_Cats_Habs <- data %>% 
+    filter(Management == 1)
+
+#select data from main data file - just the paper ID,ES category,and Habitat columns
+#concatenate the columns to make a unique ID, add this to that new data frame
+#Only keep unique ES_id rows, but keep data in all columns for those unique rows
+#Remove that ES_id column that was just added
+M_Cats_Habs <- M_Cats_Habs %>% 
+    dplyr::select(Paper_ID, ES_cat,Hab_cat) %>% 
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat,Hab_cat), remove=FALSE)  %>% 
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id)
+
+#cut all rows from this without a 1 in the Management column
+M_mult <- mult_habs_cats %>% 
+    filter(Management == 1)
+
+#select just the columns with paper ID, habitats, ES_cats
+M_mult <- M_mult %>% 
+    dplyr::select(Paper_ID, ES_cat, Hab_cat)
+
+#combine the two dataframes
+Management_ES_eco <- dplyr:: bind_rows(M_Cats_Habs, M_mult)
+
+#remove rows with Multiple for the Hab_cat column
+Management_ES_eco <- Management_ES_eco %>% 
+    filter(Hab_cat != "multiple habitats")
+
+#summarize
+M_summary <- Management_ES_eco %>% 
+    group_by(ES_cat) %>% 
+    count(Hab_cat)
+
+#repeat with siting and design
+#cut down this data frame to just rows that have a "1" for MPA Siting and design
+SD_Cats_Habs <- data %>% 
+    filter(Siting_Design == 1)
+
+#select data from main data file - just the paper ID and ES category columns
+#concatenate the paper ID,ES_cat,and Habitat columns to make a unique ID, add this to that new data frame
+#Only keep unique ES_id rows, but keep data in all columns for those unique rows
+#Remove that ES_id column that was just added
+SD_Cats_Habs <- SD_Cats_Habs %>% 
+    dplyr::select(Paper_ID, ES_cat, Hab_cat) %>% 
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat,Hab_cat), remove=FALSE)  %>% 
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id)
+
+#cut all rows from this without a 1 in the Siting and Design column from the multiple habitats data
+SD_mult <- mult_habs_cats %>% 
+    filter(Siting_Design == 1)
+
+#select just the columns with paper ID, habitats, ES_cats
+SD_mult <- SD_mult %>% 
+    dplyr::select(Paper_ID, ES_cat, Hab_cat)
+
+#combine the two dataframes
+SD_ES_eco <- dplyr:: bind_rows(SD_Cats_Habs, SD_mult)
+
+#remove rows with Multiple for the Hab_cat column
+SD_ES_eco <- SD_ES_eco %>% 
+    filter(Hab_cat != "multiple habitats")
+
+#summarize
+SD_summary <- SD_ES_eco %>% 
+    group_by(ES_cat) %>% 
+    count(Hab_cat)
+
+#do this for the financing goal studies
+
+#cut down the data frame to just rows that have a "1" for MPA Financing
+F_Cats_Habs <- data %>% 
+    filter(Financing == 1)
+
+F_Cats_Habs <- F_Cats_Habs %>% 
+    dplyr::select(Paper_ID, ES_cat,Hab_cat) %>% 
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat, Hab_cat), remove=FALSE)  %>% 
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id)
+
+#cut all rows from this without a 1 in the Financing column from the multiple habitats data
+F_mult <- mult_habs_cats %>% 
+    filter(Financing == 1)
+
+#select just the columns with paper ID, habitats, ES_cats
+F_mult <- F_mult %>% 
+    dplyr::select(Paper_ID, ES_cat, Hab_cat)
+
+#combine the two dataframes
+F_ES_eco <- dplyr:: bind_rows(F_Cats_Habs, F_mult)
+
+#remove rows with Multiple for the Hab_cat column
+F_ES_eco <- F_ES_eco %>% 
+    filter(Hab_cat != "multiple habitats")
+
+#summarize
+F_summary <- F_ES_eco %>% 
+    group_by(ES_cat) %>% 
+    count(Hab_cat)
+
+#do this for the monitoring and evaluation goal studies
+ME_Cats_Habs <- data %>% 
+    filter(Monitoring_evaluation == 1)
+
+ME_Cats_Habs <- ME_Cats_Habs %>% 
+    dplyr::select(Paper_ID, ES_cat,Hab_cat) %>% 
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat,Hab_cat), remove=FALSE)  %>% 
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id)
+
+#cut all rows from this without a 1 in the Monitoring and evaluation column from the multiple habitats data
+ME_mult <- mult_habs_cats %>% 
+    filter(Monitoring_evaluation == 1)
+
+#select just the columns with paper ID, habitats, ES_cats
+ME_mult <- ME_mult %>% 
+    dplyr::select(Paper_ID, ES_cat, Hab_cat)
+
+#combine the two dataframes
+ME_ES_eco <- dplyr:: bind_rows(ME_Cats_Habs, ME_mult)
+
+#remove rows with Multiple for the Hab_cat column
+ME_ES_eco <- ME_ES_eco %>% 
+    filter(Hab_cat != "multiple habitats")
+
+#summarize
+ME_summary <- ME_ES_eco %>% 
+    group_by(ES_cat) %>% 
+    count(Hab_cat)
+
+#do this for the "No management objectives or implications" studies
+
+OE_Cats_Habs <- data %>% 
+    filter(No_stated_management_objectives_or_implications == 1)
+
+OE_Cats_Habs <- OE_Cats_Habs %>% 
+    dplyr::select(Paper_ID, ES_cat,Hab_cat) %>% 
+    unite(ES_id, sep="_",c(Paper_ID, ES_cat,Hab_cat), remove=FALSE)  %>% 
+    distinct(ES_id, .keep_all = TRUE) %>% 
+    dplyr::select(-ES_id)
+
+#cut all rows from this without a 1 in the "No management objectives or implications" column from the multiple habitats data
+OE_mult <- mult_habs_cats %>% 
+    filter(No_stated_management_objectives_or_implications == 1)
+
+#select just the columns with paper ID, habitats, ES_cats
+OE_mult <- OE_mult %>% 
+    dplyr::select(Paper_ID, ES_cat, Hab_cat)
+
+#combine the two dataframes
+OE_ES_eco <- dplyr:: bind_rows(OE_Cats_Habs, OE_mult)
+
+#now remove rows with Multiple for the Hab_cat column
+OE_ES_eco <- OE_ES_eco %>% 
+    filter(Hab_cat != "multiple habitats")
+
+#summarize
+OE_summary <- OE_ES_eco %>% 
+    group_by(ES_cat) %>% 
+    count(Hab_cat)
+```
+
+## MPA Goals by Country
+
+```{r}
+#| include: false
+#What is the breakdown of country counts by the different MPA goals
+
+#use dataframe "SD_cats" as is has only papers with Siting and Design goals and duplicates have been removed
+View(SD_cats)
+
+#and use the "Country_dat" dataframe has just Paper_ID and country
+View(Country_dat)
+
+#filter out the NAs, multiple countries (because those were already added to dataframe)
+Country_dat <- Country_dat %>%
+  filter(country != "NA") %>% 
+  filter(country != "Multiple countries") 
+View(Country_dat)
+
+Country_dat$Paper_ID <- as.numeric(Country_dat$Paper_ID)
+
+#confirm there are still 110 unique paper IDs
+n_distinct(Country_dat$Paper_ID)
+    
+#append the country information to the SD_cats dataframe using the Paper_ID. any Paper_ID not found in SD_cats will be dropped from the country data
+SD_country <- dplyr:: left_join(SD_cats, Country_dat, by="Paper_ID")
+
+#country counts for this metric
+SD_cc <- SD_country %>% 
+    group_by(country) %>% 
+    count()
+
+#Now do this for papers with a goal of informing MPA management
+#join the M_cats dataframe with the Country data
+
+M_country <- dplyr:: left_join(M_cats, Country_dat, by="Paper_ID")
+
+M_cc <- M_country %>% 
+    group_by(country) %>% 
+    count()
+View(M_cc)
+
+#Next the financing papers
+F_country <- dplyr:: left_join(F_cats, Country_dat, by="Paper_ID")
+#breakdown of country counts for this metric
+F_cc <- F_country %>% 
+    group_by(country) %>% 
+    count()
+View(F_cc)
+
+#Now the monitoring and evaluation papers
+ME_country <- dplyr:: left_join(ME_cats, Country_dat, by="Paper_ID")
+#breakdown of country counts for this metric
+ME_cc <- ME_country %>% 
+    group_by(country) %>% 
+    count()
+View(ME_cc)
+
+#now the one-time Ecosystem service assessment papers
+
+OE_country <- dplyr:: left_join(OE_cats, Country_dat, by="Paper_ID")
+#breakdown of country counts for this metric
+OE_cc <- OE_country %>% 
+    group_by(country) %>% 
+    count()
+View(OE_cc)
+```
+
+## MPA Goals and Metrics
+
+```{r}
+#| include: false
+
+#What is the relationship between paper goals and metrics used to quantify ES? 
+
+#filter the main dataframe by metric type
+M_goals <- data  %>% 
+    filter(Management == 1)
+
+#each row remaining in the dataframe is a paper with a unique management goal
+
+#remove duplicate rows (where Paper_ID and the metric category is the same)
+M_goals <- M_goals %>% 
+    distinct(Paper_ID, Biophysical, Monetary, Health_outcome, Beneficiary_weighted_outcome, Self_reported, Informed_ranking, .keep_all=TRUE)
+
+#summarize
+(M_metric_counts <- M_goals %>% 
+    dplyr::select(Biophysical, Monetary, Health_outcome,Beneficiary_weighted_outcome, Self_reported, Informed_ranking) %>% 
+    summarise_all(list(sum),na.rm=TRUE))
+
+#Now do this for Siting and Design
+SD_goals <- data  %>% 
+    filter(Siting_Design == 1)
+
+#Remove duplicate rows
+SD_goals <- SD_goals %>% 
+    distinct(Paper_ID, Biophysical, Monetary, Health_outcome, Beneficiary_weighted_outcome, Self_reported, Informed_ranking, .keep_all=TRUE)
+
+#summarize
+(SD_metric_counts <- SD_goals %>% 
+    dplyr::select(Biophysical, Monetary, Health_outcome,Beneficiary_weighted_outcome, Self_reported, Informed_ranking) %>% 
+    summarise_all(list(sum),na.rm=TRUE))
+
+#Do this for papers that have financing as a goal
+F_goals <- data  %>% 
+    filter(Financing == 1)
+
+#remove duplicate rows
+F_goals <- F_goals %>% 
+    distinct(Paper_ID, Biophysical, Monetary, Health_outcome, Beneficiary_weighted_outcome, Self_reported, Informed_ranking, .keep_all=TRUE)
+
+#summarize
+(F_metric_counts <- F_goals %>% 
+    dplyr::select(Biophysical, Monetary, Health_outcome,Beneficiary_weighted_outcome, Self_reported, Informed_ranking) %>% 
+    summarise_all(list(sum),na.rm=TRUE))
+
+#Now for Monitoring and Evaluation
+ME_goals <- data  %>% 
+    filter(Monitoring_evaluation== 1)
+
+#Remove duplicate rows
+ME_goals <- ME_goals %>% 
+    distinct(Paper_ID, Biophysical, Monetary, Health_outcome, Beneficiary_weighted_outcome, Self_reported, Informed_ranking, .keep_all=TRUE)
+
+#summarize
+(ME_metric_counts <- ME_goals %>% 
+    dplyr::select(Biophysical, Monetary, Health_outcome,Beneficiary_weighted_outcome, Self_reported, Informed_ranking) %>% 
+    summarise_all(list(sum),na.rm=TRUE))
+View(data)
+
+#Now for "no stated management objectives or implications"
+No_obj <- data  %>% 
+    filter(No_stated_management_objectives_or_implications == 1)
+
+#Remove duplicates
+No_obj <- No_obj %>% 
+    distinct(Paper_ID, Biophysical, Monetary, Health_outcome, Beneficiary_weighted_outcome, Self_reported, Informed_ranking, .keep_all=TRUE)
+
+#summarize
+(No_obj <- No_obj %>% 
+    dplyr::select(Biophysical, Monetary, Health_outcome,Beneficiary_weighted_outcome, Self_reported, Informed_ranking) %>% 
+    summarise_all(list(sum),na.rm=TRUE))
+```
