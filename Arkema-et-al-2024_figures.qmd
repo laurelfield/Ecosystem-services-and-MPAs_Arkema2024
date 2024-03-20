@@ -48,11 +48,11 @@ library(dplyr)
 ```{r}
 #| include: false
 
-#read in current version of the data collection sheet from Google Drive. Call this dataframe "data".
-data <- read_sheet("link", sheet=3, col_names=TRUE)
+#read in data collection file "Data_Repository_Table2"
+data
 
-#read in the paper inventory sheet from Google Drive. This is metadata for papers included in this analysis. Call this dataframe "inventory"
-inventory <- read_sheet("link", sheet=2, col_names=TRUE)
+#read in the paper inventory file "Data_Repository_Table1"
+inventory
 
 #read in google sheet that has habitat type data listed out for each paper we identified as quantifying ecosystem services (ES) for multiple habitats. Call this dataframe "multiple_habs"
 multiple_habs <- read_sheet("link", sheet=6, col_names=TRUE)
